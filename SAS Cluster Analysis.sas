@@ -1,0 +1,298 @@
+* SAS Cluster Analysis HW ;
+
+
+ods graphics on;
+
+options ls=80 ps=50 nodate pageno=1;
+
+
+***** Input HATCO_X1-X14 Dataset *****;
+
+DATA HATCO;
+INFILE '/folders/myfolders/HATCO_X1-X14_tabs.txt' DLM = '09'X TRUNCOVER;
+INPUT X1 X2 X3 X4 X5 X6 X7 X8 X9 X10 X11 X12 X13 X14;
+ 
+DATA HATCO;
+	SET HATCO;
+	ID = _n_;
+	LABEL ID = 'ID - Identification'
+	      X1 = 'X1 - Delivery Speed'
+	      X2 = 'X2 - Price Level'  
+	      X3 = 'X3 - Price Flexibility'
+	      X4 = 'X4 - Manufacturer Image'
+	      X5 = 'X5 - Service Level'
+	      X6 = 'X6 - Salesforce Image'
+	      X7 = 'X7 - Product Quality'
+	      X8 = 'X8 - Firm Size'
+	      X9 = 'X9 - Usage Level'
+	      X10 = 'X10 - Satisfaction Level'
+	      X11 = 'X11 - Specification Buying'
+	      X12 = 'X12 - Procurement Structure'
+	      X13 = 'X13 - Industry Type'
+	      X14 = 'X14 - Buying Situation Type';
+	 
+
+
+***** Select Variables X1-X7 *****;
+
+DATA HATCO7;
+	SET HATCO (KEEP= ID X1 X2 X3 X4 X5 X6 X7);
+	
+PROC PRINT DATA = HATCO7;
+
+* Compute Variable Means;
+
+PROC MEANS DATA = HATCO7;
+	VAR X1 X2 X3 X4 X5 X6 X7;
+	OUTPUT OUT = MEANSHATCO
+		MEAN(X1 X2 X3 X4 X5 X6 X7) = MEANX1 MEANX2 MEANX3 MEANX4 MEANX5 MEANX6 MEANX7;
+
+PROC PRINT DATA = MEANSHATCO;
+
+* Merge HATCO Data With HATCO Means;
+
+DATA MEANSHATCO;
+	SET MEANSHATCO (DROP= _TYPE_ _FREQ_);
+	
+DATA HATCOMEANS;
+	RETAIN X1 X2 X3 X4 X5 X6 X7;
+	IF _N_ = 1 THEN SET MEANSHATCO;
+	SET HATCO;
+
+* Compute Centered HATCO Variables (Subtract Means);
+
+X1C = X1 - MEANX1;
+X2C = X2 - MEANX2;
+X3C = X3 - MEANX3;
+X4C = X4 - MEANX4;
+X5C = X5 - MEANX5;
+X6C = X6 - MEANX6;
+X7C = X7 - MEANX7;
+
+* Compute Squared Centered HATCO Variables;
+
+X1CSQR = X1C ** 2;
+X2CSQR = X2C ** 2;
+X3CSQR = X3C ** 2;
+X4CSQR = X4C ** 2;
+X5CSQR = X5C ** 2;
+X6CSQR = X6C ** 2;
+X7CSQR = X7C ** 2;
+
+* Compute Totaled Squared Centered HATCO Variables;
+
+TotDiffSqr = SUM(X1CSQR,X2CSQR,X3CSQR,X4CSQR,X5CSQR,X6CSQR,X7CSQR);
+ 
+* Compute HATCO Variables Dissimalarities (Square Root of Total);
+
+SqrRootTot = TotDiffSqr ** 0.5;
+
+* Rank the HATCO Variables Dissimalarities;
+
+PROC SORT DATA = HATCOMEANS;
+	BY DESCENDING SqrRootTot;
+
+PROC PRINT DATA = HATCOMEANS;
+
+
+***** Select 10 Largest HATCO Variables Dissimalarities*****;
+
+DATA HATCOMEANS10;
+	SET HATCOMEANS (KEEP= X1C X2C X3C X4C X5C X6C X7C 
+	X1CSQR X2CSQR X3CSQR X4CSQR X5CSQR X6CSQR X7CSQR SqrRootTot);
+	IF _N_ LE 10;
+
+PROC PRINT DATA = HATCOMEANS10;
+
+
+***** SAS Hierarchical Cluster Analysis *****;
+
+PROC CLUSTER DATA = HATCOMEANS METHOD=WARD NONORM SIMPLE CCC PSEUDO RMSSTD RSQUARE
+OUTTREE=TREE;
+	VAR X1 X2 X3 X4 X5 X6 X7;
+
+* Plot the Dendrogram;
+
+PROC TREE DATA = TREE;
+
+* Remove Identified Outliers: Observations 5 and 42 ;
+
+DATA HATCOMEANS98OBS;
+	SET HATCOMEANS;
+	IF ID EQ 5 THEN DELETE;
+	IF ID EQ 42 THEN DELETE;
+	
+PROC CLUSTER DATA = HATCOMEANS98OBS METHOD=WARD NONORM SIMPLE CCC PSEUDO RMSSTD
+RSQUARE OUTTREE=TREE;
+	VAR X1 X2 X3 X4 X5 X6 X7;
+	
+PROC TREE DATA = TREE;
+
+
+***** SAS Non-Hierarchical 4-Cluster Analysis *****;
+
+PROC FASTCLUS DATA = HATCOMEANS98OBS RADIUS=0 REPLACE=RANDOM MAXCLUSTERS=4 
+MAXITER=20 LIST DISTANCE OUT=CLUST;
+	VAR X1 X2 X3 X4 X5 X6 X7;
+
+* Plot 4-cluster Obs membership with X-Y Vatiable Scatterplots;
+
+PROC PRINT DATA = CLUST;
+
+PROC SGPLOT DATA = CLUST;
+	SCATTER X = X1 Y = X2 / GROUP = CLUSTER;
+
+PROC SGPLOT DATA = CLUST;
+	SCATTER X = X1 Y = X3 / GROUP = CLUSTER;
+
+PROC SGPLOT DATA = CLUST;
+	SCATTER X = X1 Y = X4 / GROUP = CLUSTER;
+	
+PROC SGPLOT DATA = CLUST;
+	SCATTER X = X1 Y = X5 / GROUP = CLUSTER;
+
+PROC SGPLOT DATA = CLUST;
+	SCATTER X = X1 Y = X6 / GROUP = CLUSTER;
+	
+PROC SGPLOT DATA = CLUST;
+	SCATTER X = X1 Y = X7 / GROUP = CLUSTER;
+	
+PROC SGPLOT DATA = CLUST;
+	SCATTER X = X2 Y = X3 / GROUP = CLUSTER;
+	
+PROC SGPLOT DATA = CLUST;
+	SCATTER X = X2 Y = X4 / GROUP = CLUSTER;
+	
+PROC SGPLOT DATA = CLUST;
+	SCATTER X = X2 Y = X5 / GROUP = CLUSTER;
+	
+PROC SGPLOT DATA = CLUST;
+	SCATTER X = X2 Y = X6 / GROUP = CLUSTER;
+	
+PROC SGPLOT DATA = CLUST;
+	SCATTER X = X2 Y = X7 / GROUP = CLUSTER;
+	
+PROC SGPLOT DATA = CLUST;
+	SCATTER X = X3 Y = X4 / GROUP = CLUSTER;
+
+PROC SGPLOT DATA = CLUST;
+	SCATTER X = X3 Y = X5 / GROUP = CLUSTER;
+
+PROC SGPLOT DATA = CLUST;
+	SCATTER X = X3 Y = X6 / GROUP = CLUSTER;
+	
+PROC SGPLOT DATA = CLUST;
+	SCATTER X = X3 Y = X7 / GROUP = CLUSTER;
+	
+PROC SGPLOT DATA = CLUST;
+	SCATTER X = X4 Y = X5 / GROUP = CLUSTER;
+	 
+PROC SGPLOT DATA = CLUST;
+	SCATTER X = X4 Y = X6 / GROUP = CLUSTER;
+	
+PROC SGPLOT DATA = CLUST;
+	SCATTER X = X4 Y = X7 / GROUP = CLUSTER;
+	
+PROC SGPLOT DATA = CLUST;
+	SCATTER X = X5 Y = X6 / GROUP = CLUSTER;
+	
+PROC SGPLOT DATA = CLUST;
+	SCATTER X = X5 Y = X7 / GROUP = CLUSTER;
+	
+PROC SGPLOT DATA = CLUST;
+	SCATTER X = X6 Y = X7 / GROUP = CLUSTER;
+
+
+***** Validation and Profiling the Final 4-Cluster Solution *****;
+
+* Merge Cluster Assignments with Original HBAT Data By ID (with Outliers Removed);
+* Select Variables ID X9 X10;
+
+DATA HATCO2;
+	SET HATCO (KEEP = ID X9 X10);
+	IF ID EQ 5 THEN DELETE;
+	IF ID EQ 42 THEN DELETE;
+
+PROC SORT DATA = HATCO2;
+	BY ID;
+
+PROC SORT DATA = CLUST;
+	BY ID;
+	
+DATA HATCO2CLUST (KEEP = ID X9 X10 CLUSTER);
+	MERGE HATCO2 CLUST;
+	BY ID;
+
+PROC PRINT DATA = HATCO2CLUST;
+
+
+***** Assessing 4-Cluster Criterion Validity *****; 
+
+* GLM MANOVA Analysis ;
+
+PROC GLM DATA = HATCO2CLUST;
+	CLASS CLUSTER;
+	MODEL X9 X10 = CLUSTER;
+	MEANS CLUSTER / SCHEFFE TUKEY;
+	MEANS CLUSTER;
+	MANOVA H = CLUSTER /MSTAT=EXACT;
+
+
+***** Profiling the Final 4-Cluster Solution *****; 
+
+* Merge Cluster Assignments with Original HATCO Data By ID (with Outliers Removed);
+* Select Variables ID X8 X11 X12 X13 X14;
+
+DATA HATCO5;
+	SET HATCO (KEEP= ID X8 X11 X12 X13 X14);
+	IF ID EQ 5 THEN DELETE;
+	IF ID EQ 42 THEN DELETE;
+	
+PROC SORT DATA = HATCO5;
+	BY ID;
+
+PROC SORT DATA = CLUST;
+	BY ID;
+	
+DATA HATCO5CLUST (KEEP = ID X8 X11 X12 X13 X14 CLUSTER);
+	MERGE HATCO5 CLUST;
+	BY ID;
+
+PROC PRINT DATA = HATCO5CLUST;
+
+
+***** Cross-Classification of Clusters on X8 X11 X12 X13 X14 *****;
+
+PROC FREQ DATA = HATCO5CLUST;
+	TABLE CLUSTER * X8;
+	
+PROC FREQ DATA = HATCO5CLUST;
+	TABLE CLUSTER * X11;
+
+PROC FREQ DATA = HATCO5CLUST;
+	TABLE CLUSTER * X12;
+	
+PROC FREQ DATA = HATCO5CLUST;
+	TABLE CLUSTER * X13;
+
+PROC FREQ DATA = HATCO5CLUST;
+	TABLE CLUSTER * X14;
+
+
+ods graphics off;
+
+Run;
+Quit;
+
+
+
+
+
+
+
+
+
+
+
+
+
